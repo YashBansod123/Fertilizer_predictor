@@ -1,0 +1,32 @@
+[
+  {
+    "Temparature": 28,
+    "Humidity": 65,
+    "Moisture": 22,
+    "Soil Type": "Loamy",
+    "Crop Type": "Maize",
+    "Nitrogen": 90,
+    "Phosphorous": 40,
+    "Potassium": 50
+  },
+  {
+    "Temparature": 32,
+    "Humidity": 70,
+    "Moisture": 25,
+    "Soil Type": "Sandy",
+    "Crop Type": "Sugarcane",
+    "Nitrogen": 60,
+    "Phosphorous": 30,
+    "Potassium": 40
+  },
+  {
+    "Temparature": 24,
+    "Humidity": 80,
+    "Moisture": 35,
+    "Soil Type": "Clayey",
+    "Crop Type": "Cotton",
+    "Nitrogen": 110,
+    "Phosphorous": 55,
+    "Potassium": 60
+  }
+]
