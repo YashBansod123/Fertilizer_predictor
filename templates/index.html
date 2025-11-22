@@ -58,6 +58,12 @@
             </div>
         </main>
     </div>
+    <div class="card">
+    <h2>4. Retrieve Uploaded Dataset</h2>
+    <p>Enter a UAV ID to retrieve its uploaded dataset.</p>
+    <input type="text" id="retrieveUavId" placeholder="Enter UAV ID (e.g., 3242)">
+    <button onclick="fetchUavData()">Get Dataset</button>
+</div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

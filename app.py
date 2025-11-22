@@ -216,7 +216,32 @@ def predict_fertilizer():
 
 
 
+@app.route('/get_dataset_by_uav', methods=['GET'])
+def get_dataset_by_uav():
+    uav_id = request.args.get('uav_id')
 
+    if not uav_id:
+        return jsonify({
+            "status": "error",
+            "message": "Provide UAV ID as ?uav_id=xxxx"
+        }), 400
+
+    records = list(file_collection.find(
+        {"uav_id": uav_id},
+        {"_id": 0, "data": 1, "filename": 1, "file_hash": 1, "size_bytes": 1}
+    ))
+
+    if not records:
+        return jsonify({
+            "status": "error",
+            "message": f"No dataset found for UAV ID {uav_id}"
+        }), 404
+
+    return jsonify({
+        "status": "success",
+        "uav_id": uav_id,
+        "uploaded_files": records
+    })
 
 # --- Ledger Endpoint (in-memory view) ---
 @app.route('/get_ledger', methods=['GET'])

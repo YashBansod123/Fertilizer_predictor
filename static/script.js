@@ -50,6 +50,32 @@ async function uploadFile() {
 
     if (result.status === "success") fetchAndDisplayLedger();
 }
+async function fetchUavData() {
+    const uavId = document.getElementById("retrieveUavId").value;
+    const outputEl = document.getElementById("output");
+
+    if (!uavId.trim()) {
+        alert("Please enter a UAV ID");
+        return;
+    }
+
+    outputEl.textContent = "🔍 Fetching dataset...";
+
+    try {
+        const res = await fetch(`/get_dataset_by_uav?uav_id=${uavId}`);
+        const result = await res.json();
+
+        if (result.status === "success") {
+            outputEl.textContent =
+                `✅ Dataset found for UAV: ${uavId}\n\n` +
+                JSON.stringify(result.uploaded_files, null, 2);
+        } else {
+            outputEl.textContent = `❌ ${result.message}`;
+        }
+    } catch (err) {
+        outputEl.textContent = "⚠️ Error retrieving dataset: " + err.message;
+    }
+}
 
 // 3️⃣ Predict Fertilizer Using Uploaded JSON
 async function predictFromUploadedFile() {
