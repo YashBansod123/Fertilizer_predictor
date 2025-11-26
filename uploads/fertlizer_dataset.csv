@@ -1,0 +1,4 @@
+Temparature,Humidity,Moisture,Soil Type,Crop Type,Nitrogen,Potassium,Phosphorous
+26,52,38,Sandy,Maize,37,0,0
+28,65,40,Loamy,Soybean,40,10,5
+30,60,45,Clay,Rice,50,20,10

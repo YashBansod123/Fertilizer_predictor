@@ -1,70 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smart Fertilizer System Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"
+    />
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  </head>
+  <body>
     <div class="container">
-        <header>
-            <h1>Smart Fertilizer System Dashboard 🌿</h1>
-            <p>UAV Data Collection, Authentication, and Analysis</p>
-        </header>
+      <header>
+        <h1>Smart Fertilizer System Dashboard 🌿</h1>
+        <p>UAV Data Collection, Authentication, and Analysis</p>
+      </header>
 
-        <main class="main-grid">
-            <!-- Left Panel: Controls -->
-            <div class="controls-panel">
-                <div class="card">
-                    <h2>1. UAV Authentication</h2>
-                    <input type="text" id="uavIdInput" placeholder="Enter New UAV ID (e.g., UAV-001)" />
-                    <button onclick="registerUAV()">Register UAV Node</button>
-                </div>
+      <main class="main-grid">
+        <!-- Left Panel: Controls -->
+        <div class="controls-panel">
+          <div class="card">
+            <h2>1. UAV Authentication</h2>
+            <input
+              type="text"
+              id="uavIdInput"
+              placeholder="Enter New UAV ID (e.g., UAV-001)"
+            />
+            <button onclick="registerUAV()">Register UAV Node</button>
+          </div>
 
-                <div class="card">
-                    <h2>2. Upload Dataset</h2>
-                    <input type="text" id="uavIdAuth" placeholder="Registered UAV ID" readonly />
-                    <input type="text" id="uavToken" placeholder="Your Secret Token" readonly />
-                    <label for="fileInput">Select Dataset File:</label>
-                    <input type="file" id="fileInput" />
-                    <button onclick="uploadFile()">Upload & Generate Block</button>
-                </div>
+          <div class="card">
+            <h2>2. Upload Dataset</h2>
+            <input
+              type="text"
+              id="uavIdAuth"
+              placeholder="Registered UAV ID"
+              readonly
+            />
+            <input
+              type="text"
+              id="uavToken"
+              placeholder="Your Secret Token"
+              readonly
+            />
+            <label for="fileInput">Select Dataset File:</label>
+            <input type="file" id="fileInput" />
+            <button onclick="uploadFile()">Upload & Generate Block</button>
+          </div>
 
-                <div class="card">
-                    <h2>3. Predict Fertilizer</h2>
-                    <p>Use the last uploaded dataset to predict fertilizers automatically.</p>
-                    <button onclick="predictFromUploadedFile()">Predict Fertilizer</button>
-                </div>
-            </div>
+          <div class="card">
+            <h2>3. Predict Fertilizer</h2>
+            <p>
+              Use the last uploaded dataset to predict fertilizers
+              automatically.
+            </p>
+            <button onclick="predictFromUploadedFile()">
+              Predict Fertilizer
+            </button>
+          </div>
+          <div class="card">
+            <h2>Crop Area Selection</h2>
+            <button onclick="window.location.href='/map'">Open Map</button>
+          </div>
+        </div>
 
-            <!-- Right Panel: Output -->
-            <div class="output-panel">
-                <div class="card">
-                    <h2>System Output & Logs</h2>
-                    <pre id="output">System logs will appear here...</pre>
-                </div>
+        <!-- Right Panel: Output -->
+        <div class="output-panel">
+          <div class="card">
+            <h2>System Output & Logs</h2>
+            <pre id="output">System logs will appear here...</pre>
+          </div>
 
-                <div class="card">
-                    <h2>Blockchain Data Ledger</h2>
-                    <p>
-                        Real-time view of the secure ledger. Each block represents an uploaded file sealed with a digital hash.
-                    </p>
-                    <button onclick="fetchAndDisplayLedger()" style="margin-bottom: 15px;">
-                        Refresh Ledger
-                    </button>
-                    <div id="ledger-display-container"></div>
-                </div>
-            </div>
-        </main>
+          <div class="card">
+            <h2>Blockchain Data Ledger</h2>
+            <p>
+              Real-time view of the secure ledger. Each block represents an
+              uploaded file sealed with a digital hash.
+            </p>
+            <button
+              onclick="fetchAndDisplayLedger()"
+              style="margin-bottom: 15px"
+            >
+              Refresh Ledger
+            </button>
+            <div id="ledger-display-container"></div>
+          </div>
+        </div>
+      </main>
     </div>
     <div class="card">
-    <h2>4. Retrieve Uploaded Dataset</h2>
-    <p>Enter a UAV ID to retrieve its uploaded dataset.</p>
-    <input type="text" id="retrieveUavId" placeholder="Enter UAV ID (e.g., 3242)">
-    <button onclick="fetchUavData()">Get Dataset</button>
-</div>
+      <h2>4. Retrieve Uploaded Dataset</h2>
+      <p>Enter a UAV ID to retrieve its uploaded dataset.</p>
+      <input
+        type="text"
+        id="retrieveUavId"
+        placeholder="Enter UAV ID (e.g., 3242)"
+      />
+      <button onclick="fetchUavData()">Get Dataset</button>
+    </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
+  </body>
 </html>

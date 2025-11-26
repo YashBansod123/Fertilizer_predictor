@@ -7,250 +7,255 @@ import joblib
 import pandas as pd
 import warnings
 from pymongo import MongoClient
-from Crypto.Hash import SHA256   # ✅ NIST FIPS 180-4 compliant SHA-256
+from Crypto.Hash import SHA256
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# --- MongoDB Configuration ---
-MONGO_URI = "mongodb://localhost:27017/"  # change if using MongoDB Atlas
+# =====================================
+# 🔗 MongoDB Setup
+# =====================================
+MONGO_URI = "mongodb://localhost:27017/"
 client = MongoClient(MONGO_URI)
 db = client["fertilizer_db"]
 uav_collection = db["uavs"]
 file_collection = db["uploaded_files"]
+polygon_collection = db["polygons"]
 
-# --- Flask Configuration ---
+# =====================================
+# 🌐 Flask App
+# =====================================
 app = Flask(__name__, static_folder='static', template_folder='templates')
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'txt', 'csv', 'json'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+UPLOAD_FOLDER = "uploads"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {"csv", "json", "txt"}
 
-# --- In-memory cache (optional) ---
-registered_uavs = {}
 data_blocks = []
 
-# --- Load ML Model and Label Encoder ---
+# =====================================
+# 📦 Load ML Model
+# =====================================
 try:
-    model_pipeline = joblib.load('fertilizer_pipeline.pkl')
-    label_encoder = joblib.load('label_encoder.pkl')
-    print("✅ ML model and label encoder loaded successfully!")
-except FileNotFoundError:
-    print("⚠️ Model files not found. Prediction endpoint will not work.")
+    model_pipeline = joblib.load("fertilizer_pipeline.pkl")
+    label_encoder = joblib.load("label_encoder.pkl")
+    print("✅ ML Model Loaded")
+except:
+    print("❌ Model NOT FOUND")
     model_pipeline = None
     label_encoder = None
 
-
-# --- Helper: NIST Hash (FIPS-180-4 compliant SHA-256) ---
-def nist_hash(data_to_hash):
-    """
-    Generate a NIST FIPS-180-4 compliant SHA-256 hash using PyCryptodome.
-    """
-    if not isinstance(data_to_hash, bytes):
-        data_to_hash = str(data_to_hash).encode('utf-8')
-    hash_obj = SHA256.new(data_to_hash)
-    return hash_obj.hexdigest()
+# =====================================
+# 🔐 Helpers
+# =====================================
+def nist_hash(data):
+    if not isinstance(data, bytes):
+        data = str(data).encode("utf-8")
+    h = SHA256.new(data)
+    return h.hexdigest()
 
 
-# --- Helper: allowed file check ---
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# ------------------------------------
+# 🔥 PURE PYTHON POINT-IN-POLYGON
+# ------------------------------------
+def point_in_polygon(lat, lon, poly):
+    x, y = lon, lat  # use lon=x, lat=y
+    inside = False
 
-# --- Frontend Route ---
-@app.route('/')
+    n = len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+
+        if y1 > y and y2 <= y or y2 > y and y1 <= y:
+            slope = (y - y1) * (x2 - x1) / (y2 - y1 + 0.0000001) + x1
+            if slope > x:
+                inside = not inside
+
+    return inside
+
+# =====================================
+# 🌍 ROUTES
+# =====================================
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
 
-# --- Register UAV ---
-@app.route('/register_uav', methods=['POST'])
+@app.route("/map")
+def map_page():
+    return render_template("map.html")
+
+
+# =====================================
+# 1️⃣ REGISTER UAV
+# =====================================
+@app.route("/register_uav", methods=["POST"])
 def register_uav():
-    uav_id = request.json.get('uav_id')
-    if not uav_id:
-        return jsonify({"status": "error", "message": "UAV ID is required."}), 400
+    uav_id = request.json.get("uav_id")
 
-    existing_uav = uav_collection.find_one({"uav_id": uav_id})
-    if existing_uav:
-        return jsonify({"status": "error", "message": f"UAV '{uav_id}' is already registered."}), 409
+    if not uav_id:
+        return jsonify({"status": "error", "message": "UAV ID required"}), 400
+
+    if uav_collection.find_one({"uav_id": uav_id}):
+        return jsonify({"status": "error", "message": "UAV already registered"}), 409
 
     token = str(uuid.uuid4())
-    uav_data = {"uav_id": uav_id, "token": token}
-    uav_collection.insert_one(uav_data)
+    uav_collection.insert_one({"uav_id": uav_id, "token": token})
 
-    return jsonify({
-        "status": "success",
-        "message": f"UAV '{uav_id}' registered successfully.",
-        "uav_id": uav_id,
-        "token": token
-    }), 201
+    return jsonify({"status": "success", "uav_id": uav_id, "token": token})
 
 
-# --- Upload Dataset ---
-@app.route('/upload_dataset', methods=['POST'])
+# =====================================
+# 2️⃣ UPLOAD DATASET
+# =====================================
+@app.route("/upload_dataset", methods=["POST"])
 def upload_dataset():
-    uav_id = request.form.get('uav_id')
-    token = request.form.get('token')
+    uav_id = request.form.get("uav_id")
+    token = request.form.get("token")
 
-    # Authenticate UAV
     uav = uav_collection.find_one({"uav_id": uav_id, "token": token})
     if not uav:
-        return jsonify({"status": "error", "message": "Authentication failed."}), 401
+        return jsonify({"status": "error", "message": "Authentication Failed"}), 401
 
-    if 'dataset' not in request.files:
-        return jsonify({"status": "error", "message": "No file part in the request."}), 400
+    if "dataset" not in request.files:
+        return jsonify({"status": "error", "message": "No file uploaded"}), 400
 
-    file = request.files['dataset']
-    if file.filename == '':
-        return jsonify({"status": "error", "message": "No file selected."}), 400
+    file = request.files["dataset"]
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+    file.save(filepath)
 
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+    with open(filepath, "rb") as f:
+        file_content = f.read()
+        file_hash = nist_hash(file_content)
 
-        # Compute NIST hash
-        with open(filepath, 'rb') as f:
-            file_content = f.read()
-            file_hash = nist_hash(file_content)
+    # ---------------------------
+    # SAFE CSV HANDLING
+    # ---------------------------
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(filepath)
 
-        # Load JSON content
-        with open(filepath, 'r') as f:
+        if "Latitude" not in df.columns or "Longitude" not in df.columns:
+            return jsonify({"status": "error", "message": "CSV must contain Latitude & Longitude"}), 400
+
+        df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
+        df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
+
+        df = df.dropna(subset=["Latitude", "Longitude"])
+        df = df.where(pd.notnull(df), None)
+
+        json_data = df.to_dict(orient="records")
+
+    else:
+        with open(filepath, "r") as f:
             json_data = json.load(f)
 
-        new_block = {
-            "block_id": len(data_blocks) + 1,
-            "uploader_uav": uav_id,
-            "filename": filename,
-            "file_hash": file_hash,
-            "size_bytes": len(file_content)
-        }
-        data_blocks.append(new_block)
-
-        # Store file metadata + content in MongoDB
-        file_record = {
-            "uav_id": uav_id,
-            "filename": filename,
-            "file_hash": file_hash,
-            "size_bytes": len(file_content),
-            "data": json_data
-        }
-        file_collection.insert_one(file_record)
-
-        return jsonify({
-            "status": "success",
-            "message": f"File '{filename}' uploaded and block generated.",
-            "block_data": new_block
-        }), 200
-
-    return jsonify({"status": "error", "message": "File type not allowed."}), 400
-
-
-# --- Get Uploaded Data (from MongoDB) ---
-@app.route('/get_uploaded_data', methods=['GET'])
-def get_uploaded_data():
-    all_files = list(file_collection.find({}, {"_id": 0}))
-    return jsonify(all_files)
-
-def normalize_input_keys(data):
-    """
-    Fix key names from uploaded JSON so they match model training columns.
-    """
-    key_map = {
-        "Temperature": "Temparature",  # ✅ convert to match model
-    "temperature": "Temparature",
-        "humidity": "Humidity",
-        "moisture": "Moisture",
-        "soil type": "Soil Type",
-        "crop type": "Crop Type",
-        "nitrogen": "Nitrogen",
-        "potassium": "Potassium",
-        "phosphorous": "Phosphorous"
+    # Save Blockchain Block
+    block = {
+        "block_id": len(data_blocks) + 1,
+        "uploader_uav": uav_id,
+        "filename": filename,
+        "file_hash": file_hash,
+        "size_bytes": len(file_content)
     }
+    data_blocks.append(block)
 
-    normalized = {}
-    for key, value in data.items():
-        clean_key = key.strip()
-        if clean_key in key_map:
-            normalized[key_map[clean_key]] = value
-        else:
-            normalized[clean_key] = value
-    return normalized
+    file_collection.insert_one({
+        "uav_id": uav_id,
+        "filename": filename,
+        "file_hash": file_hash,
+        "size_bytes": len(file_content),
+        "data": json_data
+    })
 
-@app.route('/predict_fertilizer', methods=['POST'])
-def predict_fertilizer():
-    if model_pipeline is None or label_encoder is None:
-        return jsonify({"status": "error", "message": "Model not loaded."}), 500
-
-    input_data = request.json
-    try:
-        # Normalize key names
-        normalized_input = normalize_input_keys(input_data)
-
-        # Build dataframe and try to match model input
-        features_df = pd.DataFrame([normalized_input])
-        features_df = features_df.apply(pd.to_numeric, errors='ignore')
-
-        print("\n===== DEBUG INFO =====")
-        print("Incoming normalized keys:", normalized_input.keys())
-        print("DataFrame columns:", features_df.columns.tolist())
-        if hasattr(model_pipeline, 'feature_names_in_'):
-            print("Model expects:", list(model_pipeline.feature_names_in_))
-        print("Input record:", features_df.to_dict(orient='records'))
-        print("=======================\n")
-
-        prediction_encoded = model_pipeline.predict(features_df)
-        prediction_name = label_encoder.inverse_transform(prediction_encoded)
-
-        return jsonify({
-            "status": "success",
-            "predicted_fertilizer": prediction_name[0]
-        })
-
-    except Exception as e:
-        import traceback
-        print("\n⚠️ PREDICTION ERROR")
-        traceback.print_exc()  # This will show the real cause
-        print("======================\n")
-        return jsonify({
-            "status": "error",
-            "message": f"{type(e).__name__}: {str(e)}"
-        }), 400
+    return jsonify({"status": "success", "message": "Uploaded successfully", "block": block})
 
 
+# =====================================
+# 3️⃣ STORE POLYGON
+# =====================================
+@app.route("/store_polygon", methods=["POST"])
+def store_polygon():
+    coords = request.json.get("coords")
+    if not coords:
+        return jsonify({"status": "error", "message": "No coordinates"}), 400
 
-@app.route('/get_dataset_by_uav', methods=['GET'])
-def get_dataset_by_uav():
-    uav_id = request.args.get('uav_id')
+    polygon_id = str(uuid.uuid4())
 
-    if not uav_id:
-        return jsonify({
-            "status": "error",
-            "message": "Provide UAV ID as ?uav_id=xxxx"
-        }), 400
+    polygon_collection.insert_one({
+        "polygon_id": polygon_id,
+        "coords": coords
+    })
 
-    records = list(file_collection.find(
-        {"uav_id": uav_id},
-        {"_id": 0, "data": 1, "filename": 1, "file_hash": 1, "size_bytes": 1}
-    ))
+    return jsonify({"status": "success", "polygon_id": polygon_id})
 
-    if not records:
-        return jsonify({
-            "status": "error",
-            "message": f"No dataset found for UAV ID {uav_id}"
-        }), 404
+
+# =====================================
+# 4️⃣ GET DRONES INSIDE POLYGON
+# =====================================
+@app.route("/drones_in_polygon", methods=["GET"])
+def drones_in_polygon():
+    polygon_id = request.args.get("polygon_id")
+
+    poly_doc = polygon_collection.find_one({"polygon_id": polygon_id})
+    if not poly_doc:
+        return jsonify({"status": "error", "message": "Polygon not found"}), 404
+
+    poly_latlon = poly_doc["coords"]
+    poly_lonlat = [(lng, lat) for lat, lng in poly_latlon]
+
+    all_files = list(file_collection.find({}, {"_id": 0}))
+
+    inside = []
+
+    for drone in all_files:
+        for rec in drone.get("data", []):
+            lat = rec.get("Latitude")
+            lon = rec.get("Longitude")
+
+            if lat is None or lon is None:
+                continue
+
+            if point_in_polygon(lat, lon, poly_lonlat):
+                inside.append({
+                    "uav_id": drone["uav_id"],
+                    "lat": lat,
+                    "lon": lon,
+                    "data": rec
+                })
 
     return jsonify({
         "status": "success",
-        "uav_id": uav_id,
-        "uploaded_files": records
+        "count": len(inside),
+        "polygon_id": polygon_id,
+        "drones_inside": inside
     })
 
-# --- Ledger Endpoint (in-memory view) ---
-@app.route('/get_ledger', methods=['GET'])
-def get_ledger():
-    return jsonify(data_blocks)
+
+# =====================================
+# 5️⃣ PREDICT FERTILIZER
+# =====================================
+@app.route("/predict_fertilizer", methods=["POST"])
+def predict_fertilizer():
+    if model_pipeline is None:
+        return jsonify({"status": "error", "message": "Model Missing"}), 500
+
+    df = pd.DataFrame([request.json])
+    pred = model_pipeline.predict(df)
+    fert = label_encoder.inverse_transform(pred)[0]
+
+    return jsonify({"status": "success", "predicted_fertilizer": fert})
 
 
-# --- Main ---
-if __name__ == '__main__':
+# =====================================
+# RUN SERVER
+# =====================================
+if __name__ == "__main__":
     if not os.path.exists(UPLOAD_FOLDER):
         os.makedirs(UPLOAD_FOLDER)
-    app.run(debug=True, port=5000)
+
+    print("🚀 Server running at http://127.0.0.1:5000")
+    app.run(debug=True)

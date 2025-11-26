@@ -80,46 +80,41 @@ async function fetchUavData() {
 // 3️⃣ Predict Fertilizer Using Uploaded JSON
 async function predictFromUploadedFile() {
     const outputEl = document.getElementById("output");
+
     try {
         const res = await fetch("/get_uploaded_data");
         const allFiles = await res.json();
 
-        if (!allFiles || allFiles.length === 0) {
-            outputEl.textContent = "❌ No uploaded data found. Please upload a JSON file first.";
+        if (!allFiles.length) {
+            outputEl.textContent = "❌ No uploaded data found.";
             return;
         }
 
-        const lastFile = allFiles[allFiles.length - 1];
-        const fileData = lastFile.data;
+        const fileData = allFiles[allFiles.length - 1].data;
 
-        if (!fileData || fileData.length === 0) {
-            outputEl.textContent = "❌ Uploaded JSON file is empty.";
-            return;
-        }
+        let finalText = "✅ Predictions:\n\n";
 
-        outputEl.textContent = "🔍 Predicting fertilizers from uploaded JSON...\n";
-        const predictions = [];
-
-        for (let entry of fileData) {
-            const response = await fetch("/predict_fertilizer", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(entry),
+        for (let row of fileData) {
+            // REMOVE NaN completely
+            Object.keys(row).forEach(k => {
+                if (row[k] === null || Number.isNaN(row[k])) delete row[k];
             });
 
-            const result = await response.json();
-            console.log("Backend response:", result);
+            const res2 = await fetch("/predict_fertilizer", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(row)
+            });
 
-            if (result.status === "success") {
-                predictions.push(`#${predictions.length + 1}: ${result.predicted_fertilizer} for Crop: ${entry["Crop Type"]}`);
-            } else {
-                predictions.push(`#${predictions.length + 1}: Error for Crop: ${entry["Crop Type"]} (${result.message})`);
-            }
+            const out = await res2.json();
+
+            finalText += `Crop: ${row["Crop Type"]} → ${out.predicted_fertilizer}\n`;
         }
 
-        outputEl.textContent = "✅ Predictions from uploaded JSON:\n\n" + predictions.join("\n");
+        outputEl.textContent = finalText;
+
     } catch (err) {
-        outputEl.textContent = "⚠️ Error during prediction: " + err.message;
+        outputEl.textContent = "❌ Prediction error: " + err.message;
     }
 }
 
@@ -159,6 +154,60 @@ async function fetchAndDisplayLedger() {
         document.getElementById("ledger-display-container").innerHTML = "<p>Error loading ledger data.</p>";
     }
 }
+function initMap() {
+    const map = L.map("map").setView([20.5937, 78.9629], 5);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+    }).addTo(map);
+
+    // Draw control
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+        draw: {
+            polyline: false,
+            circle: false,
+            marker: false,
+            rectangle: false,
+            circlemarker: false,
+            polygon: true
+        },
+        edit: {
+            featureGroup: drawnItems
+        }
+    });
+
+    map.addControl(drawControl);
+
+    // WHEN USER FINISHES DRAWING
+    map.on(L.Draw.Event.CREATED, async function (event) {
+    const layer = event.layer;
+    drawnItems.addLayer(layer);
+
+    const coords = layer.getLatLngs()[0].map(pt => [pt.lat, pt.lng]);
+
+    // STORE polygon
+    const res = await fetch("/store_polygon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coords })
+    });
+
+    const poly = await res.json();
+    const polygonId = poly.polygon_id;
+
+    // NOW GET DRONES INSIDE THIS POLYGON
+    const res2 = await fetch(`/drones_in_polygon?polygon_id=${polygonId}`);
+    const output = await res2.json();
+
+    document.getElementById("output").textContent =
+        JSON.stringify(output, null, 2);
+});
+
+}
+
 
 // Auto-load ledger when page opens
 document.addEventListener("DOMContentLoaded", fetchAndDisplayLedger);
