@@ -1,0 +1,6 @@
+Temparature,Humidity,Moisture,Soil Type,Crop Type,Nitrogen,Potassium,Phosphorous,Latitude,Longitude
+26,52,38,Sandy,Maize,37,0,0,23.11295,83.23532
+28,65,40,Loamy,Soybean,40,10,5,23.11312,83.23588
+30,60,45,Clay,Rice,50,20,10,23.11243,83.23610
+27,58,42,Clay,Cotton,41,5,7,23.11322,83.23498
+29,62,39,Loamy,Sugarcane,45,12,6,23.11224,83.23566

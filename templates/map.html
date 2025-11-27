@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Select Crop Area</title>
+    <meta charset="UTF-8" />
+    <title>Crop Area Map – Smart Fertilizer System</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -10,127 +11,322 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: Arial; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
 
-        .container {
-            display: flex;
+        .page-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            grid-template-rows: auto 200px;
+            grid-template-areas:
+                "sidebar map"
+                "output  output";
             height: 100vh;
         }
 
-        /* LEFT - Map Section */
-        #map {
-            width: 70%;
-            height: 100%;
-        }
-
-        /* RIGHT - Output Panel */
-        #output-panel {
-            width: 30%;
-            padding: 15px;
-            background: #f5f5f5;
-            border-left: 2px solid #ddd;
+        .sidebar {
+            grid-area: sidebar;
+            border-right: 1px solid #ddd;
+            padding: 10px;
             overflow-y: auto;
         }
 
+        .map-container {
+            grid-area: map;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .output-panel {
+            grid-area: output;
+            border-top: 1px solid #ddd;
+            padding: 10px;
+            background: #fafafa;
+        }
+
         .back-btn {
-            position: absolute;
-            z-index: 9999;
-            top: 20px;
-            left: 20px;
-            background: white;
-            padding: 10px 15px;
-            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background: #fff;
             cursor: pointer;
-            font-weight: bold;
+            font-size: 13px;
+        }
+
+        h2 {
+            margin: 8px 0;
+            font-size: 17px;
+        }
+
+        .polygon-list {
+            margin-top: 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 5px;
+            border-radius: 6px;
+            background: #fcfcfc;
+        }
+
+        .polygon-item {
+            padding: 6px 8px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            border: 1px solid #ddd;
+        }
+
+        .polygon-item:hover {
+            background: #f0f8ff;
+        }
+
+        label {
+            display: block;
+            margin-top: 8px;
+            font-size: 13px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 5px;
+            font-size: 13px;
+            margin-top: 3px;
+            border-radius: 4px;
             border: 1px solid #ccc;
         }
 
-        pre {
-            white-space: pre-wrap;
-            background: #222;
-            color: #0f0;
-            padding: 10px;
+        button.save-btn {
+            margin-top: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
             border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background: #2f855a;
+            color: white;
+        }
+
+        .output-box {
+            width: 100%;
+            height: 100%;
+            font-size: 12px;
+            white-space: pre-wrap;
+            background: #111827;
+            color: #e5e7eb;
+            border-radius: 6px;
+            padding: 8px;
+            overflow-y: auto;
         }
     </style>
 </head>
 
 <body>
+<div class="page-layout">
 
-<button class="back-btn" onclick="window.location.href='/'">
-    ← Back to Dashboard
-</button>
+    <!-- LEFT SIDEBAR -->
+    <div class="sidebar">
+        <button class="back-btn" onclick="window.location.href='/'">← Back to Dashboard</button>
 
-<div class="container">
+        <h2>Draw & Save Polygon</h2>
+        <p style="font-size: 13px;">
+            1. Draw a polygon on the map.<br/>
+            2. Enter a name and click <b>Save Polygon</b>.<br/>
+        </p>
 
-    <!-- LEFT: MAP -->
-    <div id="map"></div>
+        <label for="polygonName">Polygon Name</label>
+        <input type="text" id="polygonName" placeholder="e.g., Plot A, Wheat Field">
 
-    <!-- RIGHT: OUTPUT -->
-    <div id="output-panel">
-        <h2>Drone Data Inside Polygon</h2>
-        <p>Select any area on map to get drone list.</p>
-        <pre id="map-output">Waiting for selection...</pre>
+        <button class="save-btn" onclick="saveCurrentPolygon()">Save Polygon</button>
+
+        <h2 style="margin-top: 16px;">Saved Polygons</h2>
+        <div id="polygonList" class="polygon-list">
+            <!-- Filled by JS -->
+        </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- OUTPUT PANEL -->
+    <div class="output-panel">
+        <h2>Polygon Drone Data</h2>
+        <pre id="mapOutput" class="output-box">Draw a polygon or select one from the left panel...</pre>
     </div>
 
 </div>
 
 <script>
-function initMap() {
-    const map = L.map("map").setView([20.5937, 78.9629], 5);
+    let map;
+    let drawnItems;
+    let lastDrawnLayer = null;
+    let lastPolygonCoords = null;  // [[lat, lng], ...]
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-    }).addTo(map);
+    function initMap() {
+        map = L.map("map").setView([20.5937, 78.9629], 5);
 
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(map);
 
-    const drawControl = new L.Control.Draw({
-        draw: {
-            polyline: false,
-            circle: false,
-            marker: false,
-            rectangle: false,
-            circlemarker: false,
-            polygon: true
-        },
-        edit: { featureGroup: drawnItems }
-    });
+        drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
 
-    map.addControl(drawControl);
-
-    map.on(L.Draw.Event.CREATED, async function (event) {
-        const layer = event.layer;
-        drawnItems.addLayer(layer);
-
-        const coords = layer.getLatLngs()[0].map(pt => [pt.lat, pt.lng]);
-
-        document.getElementById("map-output").textContent =
-            "📡 Saving polygon...";
-
-        // SAVE POLYGON FIRST
-        const polygonResponse = await fetch("/store_polygon", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ coords })
+        const drawControl = new L.Control.Draw({
+            draw: {
+                polyline: false,
+                circle: false,
+                marker: false,
+                rectangle: false,
+                circlemarker: false,
+                polygon: true
+            },
+            edit: {
+                featureGroup: drawnItems
+            }
         });
 
-        const polygonResult = await polygonResponse.json();
+        map.addControl(drawControl);
 
-        // GET polygon_id
-        const polygon_id = polygonResult.polygon_id;
+        // When user finishes drawing a polygon
+        map.on(L.Draw.Event.CREATED, function (event) {
+            const layer = event.layer;
 
-        // NOW FETCH DRONES INSIDE THE POLYGON
-        const droneRes = await fetch(`/drones_in_polygon?polygon_id=${polygon_id}`);
-        const droneData = await droneRes.json();
+            // Clear old polygon if any
+            drawnItems.clearLayers();
+            drawnItems.addLayer(layer);
+            lastDrawnLayer = layer;
 
-        document.getElementById("map-output").textContent =
-            JSON.stringify(droneData, null, 2);
+            // Get coordinates as [[lat, lng], ...]
+            lastPolygonCoords = layer.getLatLngs()[0].map(pt => [pt.lat, pt.lng]);
+
+            document.getElementById("mapOutput").textContent =
+                "Polygon drawn.\nYou can now give it a name on the left and click 'Save Polygon'.";
+        });
+    }
+
+    async function loadPolygonList() {
+        try {
+            const res = await fetch("/get_polygons");
+            const data = await res.json();
+
+            const listDiv = document.getElementById("polygonList");
+            listDiv.innerHTML = "";
+
+            if (data.status !== "success" || !data.polygons.length) {
+                listDiv.innerHTML = "<p style='font-size:13px;'>No polygons saved yet.</p>";
+                return;
+            }
+
+            data.polygons.forEach(poly => {
+                const item = document.createElement("div");
+                item.className = "polygon-item";
+                item.textContent = `📁 ${poly.name || poly.polygon_id}`;
+                item.onclick = () => {
+                    focusPolygonAndLoadData(poly);
+                };
+                listDiv.appendChild(item);
+            });
+
+        } catch (err) {
+            console.error("Failed to load polygons:", err);
+            document.getElementById("polygonList").innerHTML =
+                "<p style='font-size:13px;color:red;'>Error loading polygons.</p>";
+        }
+    }
+
+    async function saveCurrentPolygon() {
+        const name = document.getElementById("polygonName").value.trim();
+
+        if (!lastPolygonCoords) {
+            alert("Please draw a polygon on the map first.");
+            return;
+        }
+
+        if (!name) {
+            alert("Please enter a polygon name.");
+            return;
+        }
+
+        try {
+            const res = await fetch("/store_polygon", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ coords: lastPolygonCoords, name })
+            });
+
+            const out = await res.json();
+
+            if (out.status === "success") {
+                alert("Polygon saved: " + out.name);
+                document.getElementById("polygonName").value = "";
+                await loadPolygonList(); // refresh folder list
+            } else {
+                alert("Error: " + out.message);
+            }
+        } catch (err) {
+            alert("Error saving polygon: " + err.message);
+        }
+    }
+
+    async function focusPolygonAndLoadData(poly) {
+        // Draw polygon on map
+        if (lastDrawnLayer) {
+            drawnItems.removeLayer(lastDrawnLayer);
+            lastDrawnLayer = null;
+        }
+
+        const latlngs = poly.coords.map(([lat, lng]) => [lat, lng]);
+        const layer = L.polygon(latlngs, { color: "blue" }).addTo(drawnItems);
+        lastDrawnLayer = layer;
+
+        map.fitBounds(layer.getBounds());
+
+        // Fetch drone data inside this polygon
+        try {
+            const res = await fetch(`/drones_in_polygon?polygon_id=${poly.polygon_id}`);
+            const out = await res.json();
+
+            if (out.status !== "success") {
+                document.getElementById("mapOutput").textContent =
+                    "Error: " + out.message;
+                return;
+            }
+
+            const drones = out.drones_inside || [];
+            let text = `Polygon: ${poly.name || poly.polygon_id}\n`;
+            text += `Total matching drone records: ${drones.length}\n\n`;
+
+            drones.forEach((d, idx) => {
+                text += `#${idx + 1} UAV: ${d.uav_id}\n`;
+                text += `   Lat: ${d.lat}, Lon: ${d.lon}\n`;
+                text += `   Crop: ${d.data["Crop Type"]}, Soil: ${d.data["Soil Type"]}\n`;
+                text += `   N: ${d.data["Nitrogen"]}, P: ${d.data["Phosphorous"]}, K: ${d.data["Potassium"]}\n\n`;
+            });
+
+            if (!drones.length) {
+                text += "No drones found inside this polygon.\n";
+            }
+
+            document.getElementById("mapOutput").textContent = text;
+
+        } catch (err) {
+            document.getElementById("mapOutput").textContent =
+                "Error loading polygon drone data: " + err.message;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        initMap();
+        loadPolygonList();
     });
-}
-
-document.addEventListener("DOMContentLoaded", initMap);
 </script>
 
 </body>
